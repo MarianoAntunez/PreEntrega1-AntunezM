@@ -173,3 +173,79 @@ UNLOCK TABLES;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
 -- Dump completed on 2024-04-25 22:38:10
+use cinemax;
+CREATE VIEW `detalle_peliculas` AS
+SELECT p.id_pelicula, p.titulo AS titulo_pelicula, p.año AS año_estreno, p.genero,
+       d.nombre AS nombre_director,
+       GROUP_CONCAT(a.nombre SEPARATOR ', ') AS actores
+FROM peliculas p
+JOIN directores d ON p.director = d.nombre
+JOIN relacion_peliculas_actores rpa ON p.id_pelicula = rpa.id_pelicula
+JOIN actores a ON rpa.id_actor = a.id_actor
+GROUP BY p.id_pelicula;
+-- Vista detalle_personajes_peliculas
+CREATE VIEW `detalle_personajes_peliculas` AS
+SELECT pj.id_personaje, pj.nombre AS nombre_personaje,
+       pel.titulo AS titulo_pelicula, act.nombre AS nombre_actor
+FROM personajes pj
+JOIN peliculas pel ON pj.id_pelicula_o_serie = pel.id_pelicula
+JOIN actores act ON pj.id_actor = act.id_actor;
+
+-- Vista detalle_genero_actores_peliculas
+CREATE VIEW `detalle_genero_actores_peliculas` AS
+SELECT pel.id_pelicula, pel.titulo AS titulo_pelicula, pel.genero,
+       COUNT(rpa.id_actor) AS cantidad_actores
+FROM peliculas pel
+LEFT JOIN relacion_peliculas_actores rpa ON pel.id_pelicula = rpa.id_pelicula
+GROUP BY pel.id_pelicula;
+DELIMITER //
+
+CREATE FUNCTION peliculas_por_actor(actor_name VARCHAR(255)) RETURNS VARCHAR(1000) DETERMINISTIC
+BEGIN
+    DECLARE movie_list VARCHAR(1000);
+    
+    SELECT GROUP_CONCAT(p.titulo SEPARATOR ', ') INTO movie_list
+    FROM peliculas p
+    JOIN relacion_peliculas_actores rpa ON p.id_pelicula = rpa.id_pelicula
+    JOIN actores a ON rpa.id_actor = a.id_actor
+    WHERE a.nombre = actor_name;
+    
+    IF movie_list IS NULL THEN
+        RETURN 'El actor no ha participado en ninguna pelicula.';
+    ELSE
+        RETURN movie_list;
+    END IF;
+END
+DELIMITER //
+
+CREATE PROCEDURE generar_informe_actor(IN actor_name VARCHAR(255))
+BEGIN
+    SELECT p.titulo AS Titulo, p.año AS Año, p.genero AS Genero
+    FROM peliculas p
+    JOIN relacion_peliculas_actores rpa ON p.id_pelicula = rpa.id_pelicula
+    JOIN actores a ON rpa.id_actor = a.id_actor
+    WHERE a.nombre = actor_name;
+END //
+
+DELIMITER ;
+CREATE TABLE registro_peliculas (
+    id_registro INT AUTO_INCREMENT PRIMARY KEY,
+    id_pelicula INT,
+    titulo_pelicula VARCHAR(255),
+    fecha_registro TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+DELIMITER //
+
+CREATE TRIGGER after_insert_pelicula
+AFTER INSERT ON peliculas
+FOR EACH ROW
+BEGIN
+    INSERT INTO registro_peliculas (id_pelicula, titulo_pelicula)
+    VALUES (NEW.id_pelicula, NEW.titulo);
+END;
+//
+
+DELIMITER ;
+-- Testeando triggers: Insertar una nueva película
+INSERT INTO peliculas (titulo, año, director, genero)
+VALUES ('El Gran Escape', 1963, 'John Sturges', 'Drama, Acción, Aventura');
